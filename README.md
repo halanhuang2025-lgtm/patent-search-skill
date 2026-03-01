@@ -1,55 +1,59 @@
 # 🔍 patent-search
 
-> OpenClaw skill — 从公开数据库批量检索、下载和分析公司专利组合
+> OpenClaw skill — Search, download, and analyze a company's patent portfolio from public databases. No API key required.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
-
-## 功能概览
-
-| 步骤 | 脚本 | 功能 |
-|------|------|------|
-| 1️⃣ 搜索 | `fpo_search.py` | FreePatentsOnline 按申请人批量抓取 |
-| 2️⃣ 补充 | `google_patents_csv.py` | Google Patents CSV 导出，补充 EP/近期专利 |
-| 3️⃣ 整理 | `compile_patents.py` | 合并去重 + 自动分类 → Markdown + CSV 报告 |
-| 4️⃣ 下载 | `download_patents.py` | 批量下载 PDF（USPTO 官方接口，免费） |
-| 5️⃣ 分析 | `process_patents.py` | 整理文件夹 + 提取摘要/权利要求 + 相关性评分 |
-
-**实测数据（Multivac 公司）**：466 件专利，465 件 PDF 下载成功（99.8%），全部摘要提取成功，耗时约 10 分钟。
+[中文文档](#中文说明)
 
 ---
 
-## 快速上手
+## Overview
 
-### 安装依赖
+A complete 5-step pipeline from search to competitive analysis:
+
+| Step | Script | What it does |
+|------|--------|-------------|
+| 1️⃣ Search | `fpo_search.py` | Bulk search FreePatentsOnline by assignee name |
+| 2️⃣ Supplement | `google_patents_csv.py` | Export CSV from Google Patents (EP/recent coverage) |
+| 3️⃣ Compile | `compile_patents.py` | Merge, deduplicate, auto-categorize → Markdown + CSV report |
+| 4️⃣ Download | `download_patents.py` | Batch download PDFs via USPTO's free API |
+| 5️⃣ Analyze | `process_patents.py` | Organize folders + extract abstracts/claims + relevance scoring |
+
+**Tested on Multivac**: 466 patents retrieved, 465 PDFs downloaded (99.8% success), all abstracts extracted — in ~10 minutes.
+
+---
+
+## Quick Start
+
+### Install dependencies
 
 ```bash
 pip install pdfplumber pypdf
 ```
 
-### 完整流程
+### Full pipeline
 
 ```bash
-# 1. 搜索专利列表
+# 1. Search patent list
 python3 scripts/fpo_search.py \
   --assignee "MULTIVAC SEPP HAGGENMUELLER" \
   --pages 12 \
   --out /tmp/patents.json
 
-# 2. 生成分类报告
+# 2. Generate categorized report
 python3 scripts/compile_patents.py \
   --fpo /tmp/patents.json \
   --out ~/patents_report.md \
   --company "Multivac"
 
-# 3. 批量下载 PDF（~10-30 分钟，视专利数量）
+# 3. Batch download PDFs (10–30 min depending on count)
 python3 scripts/download_patents.py \
   --input /tmp/patents.json \
   --outdir ~/Downloads/patents_pdf \
   --workers 3
 
-# 4. 整理 + 提取 + 分析
+# 4. Organize + extract + analyze
 python3 scripts/process_patents.py \
   --pdf-dir ~/Downloads/patents_pdf \
   --fpo-json /tmp/patents.json \
@@ -58,152 +62,195 @@ python3 scripts/process_patents.py \
 
 ---
 
-## 各脚本说明
+## Scripts
 
 ### `fpo_search.py`
 
-从 [FreePatentsOnline](https://www.freepatentsonline.com) 按申请人名称批量检索美国专利。
+Searches [FreePatentsOnline](https://www.freepatentsonline.com) by assignee. No auth, no Cloudflare, paginates reliably.
 
-```
+```bash
 python3 fpo_search.py --assignee <NAME> [--pages N] [--delay SEC] [--out FILE]
 ```
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--assignee` | 必填 | 申请人名称（全大写效果更好） |
-| `--pages` | 10 | 最大抓取页数（每页 50 条） |
-| `--delay` | 1.2 | 请求间隔（秒），避免被封 |
-| `--out` | /tmp/fpo_patents.json | 输出 JSON 路径 |
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--assignee` | required | Assignee name (ALL CAPS works best) |
+| `--pages` | 10 | Max pages to fetch (50 results/page) |
+| `--delay` | 1.2 | Delay between requests (seconds) |
+| `--out` | /tmp/fpo_patents.json | Output JSON path |
 
-> **提示**：公司名有多种写法时，建议分别搜索后合并，例如 `MULTIVAC SEPP HAGGENMUELLER` 和 `Multivac`。
+> **Tip**: Companies often have multiple name variants. Search `COMPANY NAME` and `COMPANY INC` separately and merge.
 
 ---
 
 ### `google_patents_csv.py`
 
-通过 Google Patents 隐藏 CSV 接口导出专利数据，覆盖 EP、WO、近期专利。
+Exports patent data from Google Patents via a hidden XHR/CSV endpoint. Better EP and recent patent coverage.
 
-```
+```bash
 python3 google_patents_csv.py --assignee <NAME> [--delay SEC] [--out FILE]
 ```
 
-> ⚠️ Google Patents 有速率限制，连续请求超过 3 次会返回 503，建议 `--delay 2.0`。
+> ⚠️ Google Patents rate-limits after ~3 rapid requests (HTTP 503). Use `--delay 2.0` to be safe.
 
 ---
 
 ### `compile_patents.py`
 
-合并多个来源，去重，按技术领域自动分类，输出 Markdown 报告和 CSV。
+Merges sources, deduplicates, auto-categorizes by title keywords, and outputs a Markdown report + CSV.
 
-```
+```bash
 python3 compile_patents.py --fpo <JSON> [--gp <CSV>] --out <MD> [--company <NAME>]
 ```
 
-**自动分类（15 个领域）**：
+**15 auto-categories:**
 
-| 领域 | 关键词示例 |
-|------|-----------|
+| Category | Example keywords |
+|----------|-----------------|
 | Thermoforming | thermoform, deep draw, forming station |
 | Tray Sealer | tray seal, tray sealer |
 | Chamber Machine | chamber, vacuum bag |
 | Slicing | slicer, blade, caliber |
 | Smart/Digital | process param, bus node, predictive |
-| … | 详见 `references/categories.md` |
+| … | See `references/categories.md` for full list |
 
 ---
 
 ### `download_patents.py`
 
-批量从 USPTO 下载专利 PDF，支持断点续传。
+Batch downloads patent PDFs. Resumes interrupted downloads automatically.
 
+```bash
+python3 download_patents.py \
+  --input <JSON_or_CSV> \
+  --outdir <DIR> \
+  [--workers N] \
+  [--delay SEC] \
+  [--limit N]
 ```
-python3 download_patents.py --input <JSON_or_CSV> --outdir <DIR> [--workers N] [--delay SEC] [--limit N]
-```
 
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--input` | 必填 | fpo_search.py 的 JSON 或 compile 的 CSV |
-| `--outdir` | /tmp/patents_pdf | PDF 保存目录 |
-| `--workers` | 3 | 并发下载线程数 |
-| `--delay` | 0.5 | 请求间隔（秒） |
-| `--limit` | 0（全部）| 限制下载数量（测试用） |
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--input` | required | JSON from fpo_search.py or CSV from compile |
+| `--outdir` | /tmp/patents_pdf | Output directory for PDFs |
+| `--workers` | 3 | Parallel download threads |
+| `--delay` | 0.5 | Delay between requests (seconds) |
+| `--limit` | 0 (all) | Max patents to download (for testing) |
 
-**下载来源优先级**：
+**Source priority:**
 
-1. 🥇 [USPTO image-ppubs](https://image-ppubs.uspto.gov) — 主力，免费，稳定
-2. 🥈 Google Patents PDF — 备用
-3. 🥉 Espacenet — EP/WO 专利
+1. 🥇 [USPTO image-ppubs](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/{id}) — primary, free, ~99% success
+2. 🥈 Google Patents PDF — fallback
+3. 🥉 Espacenet — for EP/WO patents
 
-下载完成后输出：
-- `download_log.csv` — 每件专利的下载状态
-- `failed_ids.txt` — 失败列表（可重试）
+**Outputs:**
+- `download_log.csv` — status for every patent
+- `failed_ids.txt` — patents that failed (can be retried)
 
 ---
 
 ### `process_patents.py`
 
-三合一处理器：整理文件夹 → 提取文本 → 竞品相关性分析。
+Three-in-one processor: organize into folders → extract text → relevance scoring.
 
-```
+```bash
 python3 process_patents.py \
-  --pdf-dir <PDF目录> \
+  --pdf-dir <PDF_DIR> \
   --fpo-json <JSON> \
-  --out-dir <输出目录> \
+  --out-dir <OUT_DIR> \
   [--keywords "term:weight,term:weight"] \
   [--no-extract]
 ```
 
-| 参数 | 说明 |
-|------|------|
-| `--keywords` | 自定义相关性关键词，格式 `"tray seal:10,chamber:8"` |
-| `--no-extract` | 跳过 PDF 文本提取，只做整理和标题级评分 |
+| Argument | Description |
+|----------|-------------|
+| `--keywords` | Custom relevance keywords, e.g. `"tray seal:10,chamber:8"` |
+| `--no-extract` | Skip PDF text extraction (faster, title-based scoring only) |
 
-**输出**：
+**Output structure:**
 ```
 out-dir/
-├── Thermoforming/          # 按类别整理的 PDF
+├── Thermoforming/          # PDFs organized by category
 ├── Tray_Sealer/
 ├── Chamber_Machine/
 ├── ...
-├── all_extractions.json    # 每件专利的摘要 + 权利要求
-└── RELEVANCE_REPORT.md     # 竞品相关性分析报告
+├── all_extractions.json    # Abstract + top 3 claims per patent
+└── RELEVANCE_REPORT.md     # Competitive analysis report
 ```
 
----
-
-## 数据来源说明
-
-| 数据库 | 覆盖范围 | 自动化支持 | 备注 |
-|--------|---------|-----------|------|
-| FreePatentsOnline | 美国专利 | ✅ 最稳定 | 无 Cloudflare |
-| Google Patents | 全球（US/EP/WO/DE/JP/CN）| ⚠️ 有速率限制 | 建议间隔 2s |
-| USPTO image-ppubs | 美国专利 PDF | ✅ 官方接口 | 99%+ 成功率 |
-| Espacenet (EPO) | 全球 140+ 国 | ⚠️ 限制较多 | EP/WO 专利 PDF |
-| PATENTSCOPE (WIPO) | PCT 国际申请 | ❌ JS 渲染 | 建议手动 |
-
-> 详细说明见 `references/databases.md`
+The relevance report includes:
+- Patent count per technology area with risk level
+- Top 30 scored patents (ranked by keyword match + category weight)
+- Full detail (abstract, claims, link) for top 15
+- High-risk patent checklist for legal review
 
 ---
 
-## 作为 OpenClaw Skill 使用
+## Data Sources
 
-本仓库是一个标准 OpenClaw AgentSkill，可直接安装：
+| Database | Coverage | Automation | Notes |
+|----------|----------|------------|-------|
+| FreePatentsOnline | US patents | ✅ Most reliable | No Cloudflare |
+| Google Patents | Global (US/EP/WO/DE/JP/CN) | ⚠️ Rate-limited | Space requests 2s+ |
+| USPTO image-ppubs | US patent PDFs | ✅ Official API | 99%+ success rate |
+| Espacenet (EPO) | 140+ countries | ⚠️ Restricted | EP/WO PDFs only |
+| PATENTSCOPE (WIPO) | PCT applications | ❌ JS-rendered | Manual only |
+
+See `references/databases.md` for details.
+
+---
+
+## Using as an OpenClaw Skill
+
+This repository is a standard [OpenClaw](https://github.com/openclaw/openclaw) AgentSkill:
 
 ```bash
-# 方式一：从 .skill 文件安装
+# Install from ClawHub
 clawhub install patent-search
 
-# 方式二：克隆后本地安装
+# Or install locally
 git clone https://github.com/halanhuang2025-lgtm/patent-search-skill.git
 clawhub install ./patent-search-skill --local
 ```
 
-安装后，直接对 OpenClaw 说：
+Once installed, just tell OpenClaw:
 
-> "帮我检索一下 [公司名] 的专利，全部下载下来，然后分析哪些跟我们产品相关"
+> "Search patents for [company name], download all PDFs, and analyze which ones are relevant to our products"
 
 ---
 
 ## License
 
 MIT
+
+---
+
+## 中文说明
+
+### 功能
+
+无需 API Key，从公开专利数据库批量检索、下载和分析指定公司的专利组合。
+
+### 完整流程
+
+```bash
+# 1. 搜索专利列表
+python3 scripts/fpo_search.py --assignee "公司英文名" --pages 12 --out /tmp/patents.json
+
+# 2. 生成分类报告
+python3 scripts/compile_patents.py --fpo /tmp/patents.json --out ~/report.md --company "公司名"
+
+# 3. 批量下载 PDF（约 10-30 分钟）
+python3 scripts/download_patents.py --input /tmp/patents.json --outdir ~/Downloads/patents --workers 3
+
+# 4. 整理 + 提取摘要/权利要求 + 竞品分析
+python3 scripts/process_patents.py --pdf-dir ~/Downloads/patents --fpo-json /tmp/patents.json --out-dir ~/Downloads/organized
+```
+
+### 关键特点
+
+- **免费**：全部使用公开接口，无需付费订阅
+- **高成功率**：USPTO image-ppubs 接口下载成功率 99%+
+- **自动分类**：15 个技术领域自动归类
+- **竞品分析**：可配置关键词权重，输出相关性评分报告
+- **断点续传**：下载中断后重跑会自动跳过已存在文件
