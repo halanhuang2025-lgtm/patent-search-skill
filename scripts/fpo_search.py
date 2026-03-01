@@ -89,11 +89,10 @@ def main():
                     all_patents.append(e)
                     new += 1
 
-            max_seq = max(e["seq"] for e in entries) if entries else 0
-            print(f"  Page {page}: {len(entries)} entries, {new} new (total seq up to {max_seq})")
+            print(f"  Page {page}: {len(entries)} entries, {new} new (running total: {len(all_patents)})")
 
-            # Stop if we've reached the last page (seq didn't advance much)
-            if max_seq < page * 50 - 10:
+            # Stop if fewer than 10 results returned (last page)
+            if len(entries) < 10:
                 print(f"  Reached end at page {page}.")
                 break
 
